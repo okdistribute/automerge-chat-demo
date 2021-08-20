@@ -60,7 +60,7 @@ function Chat(props: { room: Room } ) {
   let { room } = props
 
   return <div><ul>
-    {room.messages.map(m => <li>{m.text}</li>)}
+    {room.messages.map(m => <li key={m.time}>{m.text}</li>)}
     </ul>
     <input onChange={e => setMessage(e.target.value)} defaultValue={message} />
     <button onClick={() => sendMessage(room.name, message)}>Send</button>
@@ -74,11 +74,19 @@ function App() {
   let r = React.createRef<HTMLInputElement>()
 
   function joinRoom() {
-    let roomName = r.current?.value;
-    if (!roomName) return
-    let client = getRoom(roomName)
-    setRoom(client.document)
-    console.log('joining room')
+    let newRoomName = r.current?.value;
+    if (!newRoomName) return
+
+    let newRoom = getRoom(newRoomName)
+    setRoom(newRoom.document)
+    setRoomName(newRoomName)
+    console.log('joining room', newRoomName)
+
+    if (roomName) {
+      console.log('closing old room', roomName)
+      let old = getRoom(roomName)
+      old.close()
+    }
   }
 
   useEffect(() => {
