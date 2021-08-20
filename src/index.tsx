@@ -1,6 +1,5 @@
 import React, {useState, useEffect} from 'react';
 import ReactDOM from 'react-dom';
-import './index.css';
 import './App.css';
 import * as chat from './chat'
 
@@ -30,27 +29,29 @@ function App() {
 
   let ref = React.createRef<HTMLInputElement>()
 
-  function joinRoom() {
-    let newRoomName = ref.current?.value;
-    if (!newRoomName) return
-    setRoomName(newRoomName)
+  function joinRoom(roomName: string) {
+    setRoomName(roomName)
     let old = chat.get(roomName)
     if (old && roomName) {
       old.close()
     }
   }
 
+  function addRoom() {
+    let newRoomName = ref.current?.value;
+    if (!newRoomName) return
+    joinRoom(newRoomName)
+  }
+
   useEffect(() => {
     if (!roomName.length) return
     let client = chat.get(roomName) || chat.create(roomName)
-    if (!client) throw new Error('Could not create room with name ' + roomName)
-
     function onupdate () {
       setRoom(client.document)
     }
     client.on('update', onupdate)
-    onupdate()
 
+    onupdate()
     return () => {
       client.removeListener('update', onupdate)
     }
@@ -60,10 +61,18 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        {room ? <Chat room={room} /> : <div>Join a room!</div> }
-
-        <input ref={ref} ></input>
-        <button onClick={joinRoom}>Join</button>
+        <div>
+          {chat.list().map(roomName => 
+            <div onClick={() => joinRoom(roomName)}>{roomName}</div>
+          )}
+          <div>
+            <input ref={ref} ></input>
+            <button onClick={addRoom}>+</button>
+          </div>
+        </div>
+        <div>
+          {room ? <Chat room={room} /> : null }
+        </div>
       </header>
     </div>
   );

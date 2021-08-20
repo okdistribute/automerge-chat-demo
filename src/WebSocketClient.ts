@@ -36,7 +36,6 @@ export default class Client<T> extends events.EventEmitter {
     };
 
     this.client.onclose = () => {
-      console.log('echo-protocol Client Closed');
       setTimeout(() => {
         this._createClient()
       }, 100)
@@ -45,7 +44,6 @@ export default class Client<T> extends events.EventEmitter {
     this.client.onmessage = (e) => {
       //@ts-ignore
       let msg = new Uint8Array(e.data);
-      console.log('got message', msg)
       //@ts-ignore
       let [ newDoc, newSyncState, patch ] = Automerge.receiveSyncMessage(this.document, this.syncState, msg)
       this.document = newDoc;
