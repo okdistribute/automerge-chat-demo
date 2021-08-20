@@ -22,8 +22,8 @@ function createRoom(name: string): Client<Room> {
 
 }
 
-function getRoom(name: string): Client<Room> {
-  return rooms.get(name) || createRoom(name)
+function getRoom(name: string): Client<Room> | undefined {
+  return rooms.get(name)
 }
 
 function updateRoom(client: Client<Room>, newDoc: Room) {
@@ -76,15 +76,16 @@ function App() {
   function joinRoom() {
     let newRoomName = r.current?.value;
     if (!newRoomName) return
+    console.log('closing old room', roomName)
+    let old = getRoom(roomName)
+    if (old && roomName === newRoomName) return;
 
-    let newRoom = getRoom(newRoomName)
+    let newRoom = getRoom(newRoomName) || createRoom(newRoomName)
     setRoom(newRoom.document)
     setRoomName(newRoomName)
     console.log('joining room', newRoomName)
 
-    if (roomName) {
-      console.log('closing old room', roomName)
-      let old = getRoom(roomName)
+    if (old && roomName) {
       old.close()
     }
   }
