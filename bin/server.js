@@ -28,14 +28,31 @@ function originIsAllowed(origin) {
 	return true;
  }
 
-const documents = new Map() 
-
 class Peer {
 	constructor (connection) {
-		this.id = crypto.randomBytes(16).toString('hex')
-		this.connection = connection
+		this.id = crypto.randomBytes(16).toString('hex');
+		this.connection = connection;
+		this.stale = false;
 	}
 }
+
+const pipeOneWay = (A, B) => {
+	let onmessage = data => {
+		B.sendBytes(data.binaryData);
+	}
+	const cleanup = () => {
+		A.close()
+		B.close()
+		A.removeListener('message', onmessage)
+		A.removeListener('error', cleanup)
+		A.removeListener('close', cleanup)
+	}
+	A.on('message', onmessage)
+	A.on('error', cleanup)
+	A.on('close', cleanup)
+}
+
+const documents = new Map() 
 
 wsServer.on('request', function(request) {
     if (!originIsAllowed(request.origin)) {
@@ -46,35 +63,20 @@ wsServer.on('request', function(request) {
     }
 	connection = request.accept('echo-protocol', request.origin);
 	let peers = documents.get(request.resource) || []
-    connection.on('close', function(reasonCode, description) {
-		let newPeers = peers.filter(p => {
-			return p.id !== me.id
-		})
-		documents.set(request.resource, newPeers)
-        console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
-    });
+	console.log('get peers', peers.length)
 	let me = new Peer(connection)
 	peers.forEach(p => {
-		console.log('piping', p.id, me.id)
-		pipeSockets(p.connection, me.connection)
+		if (!p.stale) {
+			pipeOneWay(p.connection, me.connection)
+			pipeOneWay(me.connection, p.connection)
+		}
 	})
 	peers.push(me)
+    connection.on('close', function(reasonCode, description) {
+		me.stale = true
+		documents.set(request.resource, peers.filter(p => !p.stale))
+		console.log(documents.get(request.resource).length)
+        console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
+    });
 	documents.set(request.resource, peers)
-
 });
-
-const pipeSockets = (socket1, socket2) => {
-	const pipeOneWay = (A, B) => {
-	  const cleanup = () => {
-		A.close()
-		B.close()
-	  }
-	  A.on('message', data => {
-		B.sendBytes(data.binaryData);
-	  })
-	  A.on('error', cleanup)
-	  A.on('close', cleanup)
-	}
-	pipeOneWay(socket1, socket2)
-	pipeOneWay(socket2, socket1)
-  }
