@@ -44,17 +44,19 @@ export default class Client<T> extends events.EventEmitter {
       let [ newDoc, newSyncState, patch ] = Automerge.receiveSyncMessage(this.document, this.syncState, msg)
       this.document = newDoc;
       this.syncState = newSyncState;
+      if (patch) {
+        this.emit('update')
+      }
     }; 
   }
 
-  update(document: Automerge.Doc<T>) {
+  update() {
     if (!this.open) {
-      this.once('open', () => this.update(document))
+      this.once('open', () => this.update())
       return
     }
-    this.document = document
     this.updatePeer()
-
+    this.emit('update')
   }
 
   updatePeer() {
