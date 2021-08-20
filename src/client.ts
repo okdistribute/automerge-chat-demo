@@ -1,11 +1,10 @@
-import { w3cwebsocket as W3CWebSocket } from 'websocket';
 import events from 'events';
 import Automerge from 'automerge'
 
 export default class Client<T> extends events.EventEmitter {
   open: boolean = false;
   syncState: Automerge.SyncState;
-  client: W3CWebSocket;
+  client: WebSocket;
   documentId: string;
   document: Automerge.Doc<T>
 
@@ -14,10 +13,14 @@ export default class Client<T> extends events.EventEmitter {
     this.document = document;
     this.documentId = documentId;
     this.syncState = Automerge.initSyncState()
+    this.client = this._createClient()
+  }
 
-    this.client = new W3CWebSocket(`ws://localhost:8080/${documentId}`, 'echo-protocol');
+  _createClient(): WebSocket {
+    this.syncState = Automerge.initSyncState()
+    this.client = new WebSocket(`ws://localhost:8080/${this.documentId}`, 'echo-protocol');
     this.client.binaryType = 'arraybuffer';
-    console.log('Joining', documentId)
+    console.log('Joining', this.documentId)
 
     this.client.onerror = () => {
       console.log('Connection Error');
@@ -28,26 +31,30 @@ export default class Client<T> extends events.EventEmitter {
       if (this.client.readyState === this.client.OPEN) {
         this.open = true
         this.emit('open')
+        this.updatePeers()
       }
     };
 
     this.client.onclose = () => {
       console.log('echo-protocol Client Closed');
-      this.emit('close')
+      setTimeout(() => {
+        this._createClient()
+      }, 100)
     };
 
     this.client.onmessage = (e) => {
-      console.log('got message')
       //@ts-ignore
       let msg = new Uint8Array(e.data);
+      console.log('got message', msg)
       //@ts-ignore
       let [ newDoc, newSyncState, patch ] = Automerge.receiveSyncMessage(this.document, this.syncState, msg)
       this.document = newDoc;
       this.syncState = newSyncState;
-      if (patch) {
-        this.emit('update')
-      }
+      console.log(patch)
+      this.emit('update')
+      this.updatePeers()
     }; 
+    return this.client;
   }
 
   update() {
@@ -55,19 +62,21 @@ export default class Client<T> extends events.EventEmitter {
       this.once('open', () => this.update())
       return
     }
-    this.updatePeer()
+    this.updatePeers()
     this.emit('update')
   }
 
-  updatePeer() {
+  updatePeers() {
     let [nextSyncState, msg] = Automerge.generateSyncMessage(
       this.document,
       this.syncState
     );
     this.syncState = nextSyncState
     if (msg) {
-      console.log('sending sync state')
+      console.log('sending sync msg')
       this.client.send(msg)
+    } else {
+      console.log('no sync message to send')
     }
   }
 

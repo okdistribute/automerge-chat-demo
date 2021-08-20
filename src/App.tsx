@@ -7,10 +7,13 @@ import { createHash } from 'crypto';
 let rooms = new Map<string, Client<Room>>()
 
 function createRoom(name: string): Client<Room> {
-  let room = Automerge.change(Automerge.init<Room>('0000'), { time: 0 }, (doc: Room) => {
+  console.log('creating room')
+  let head = Automerge.change(Automerge.init<Room>('0000'), { time: 0 }, (doc: Room) => {
     doc.name = name;
     doc.messages = []
   });
+
+  let room = Automerge.load<Room>(Automerge.save(head))
   // room name is hidden from server
   let hash = createHash('sha256') 
   hash.update(room.name)
@@ -40,6 +43,7 @@ function sendMessage(roomName: string, text: string) {
       time: Date.now()
     })
   })
+  console.log(newDoc.messages)
   console.log('sending message', roomName, text)
   updateRoom(client, newDoc)
 }
@@ -76,26 +80,26 @@ function App() {
   function joinRoom() {
     let newRoomName = r.current?.value;
     if (!newRoomName) return
-    console.log('closing old room', roomName)
-    let old = getRoom(roomName)
-    if (old && roomName === newRoomName) return;
-
-    let newRoom = getRoom(newRoomName) || createRoom(newRoomName)
-    setRoom(newRoom.document)
     setRoomName(newRoomName)
-    console.log('joining room', newRoomName)
-
+    let old = getRoom(roomName)
     if (old && roomName) {
       old.close()
     }
   }
 
   useEffect(() => {
-    let client = getRoom(roomName)
-    console.log('creating listener')
-    client.on('update', () => {
+    let client = getRoom(roomName) || createRoom(roomName)
+    if (!client) return
+    function onupdate () {
+      console.log(Automerge.getConflicts<Room>(client.document, 'messages'))
+      console.log('got update', client.document)
       setRoom(client.document)
-    })
+    }
+    client.on('update', onupdate)
+    setRoom(client.document)
+    return () => {
+      client.removeListener('update', onupdate)
+    }
   }, [roomName])
 
 

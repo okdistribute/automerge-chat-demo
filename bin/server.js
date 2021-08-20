@@ -1,6 +1,7 @@
 var WebSocketServer = require('websocket').server
 var request = require('websocket').request
 var http = require('http');
+var crypto = require('crypto');
 
 var server = http.createServer(function(request, response) {
     console.log((new Date()) + ' Received request for ' + request.url);
@@ -29,6 +30,13 @@ function originIsAllowed(origin) {
 
 const documents = new Map() 
 
+class Peer {
+	constructor (connection) {
+		this.id = crypto.randomBytes(16).toString('hex')
+		this.connection = connection
+	}
+}
+
 wsServer.on('request', function(request) {
     if (!originIsAllowed(request.origin)) {
       // Make sure we only accept requests from an allowed origin
@@ -37,18 +45,36 @@ wsServer.on('request', function(request) {
       return;
     }
 	connection = request.accept('echo-protocol', request.origin);
-    connection.on('message', function(message) {
-        if (message.type === 'utf8') {
-            console.log('Received Message: ' + message.utf8Data);
-            connection.sendUTF(message.utf8Data);
-        }
-        else if (message.type === 'binary') {
-            console.log('Received Binary Message of ' + message.binaryData.length + ' bytes');
-            connection.sendBytes(message.binaryData);
-        }
-    });
+	let peers = documents.get(request.resource) || []
     connection.on('close', function(reasonCode, description) {
+		let newPeers = peers.filter(p => {
+			return p.id !== me.id
+		})
+		documents.set(request.resource, newPeers)
         console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
     });
+	let me = new Peer(connection)
+	peers.forEach(p => {
+		console.log('piping', p.id, me.id)
+		pipeSockets(p.connection, me.connection)
+	})
+	peers.push(me)
+	documents.set(request.resource, peers)
+
 });
 
+const pipeSockets = (socket1, socket2) => {
+	const pipeOneWay = (A, B) => {
+	  const cleanup = () => {
+		A.close()
+		B.close()
+	  }
+	  A.on('message', data => {
+		B.sendBytes(data.binaryData);
+	  })
+	  A.on('error', cleanup)
+	  A.on('close', cleanup)
+	}
+	pipeOneWay(socket1, socket2)
+	pipeOneWay(socket2, socket1)
+  }
