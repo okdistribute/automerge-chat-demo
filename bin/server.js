@@ -1,5 +1,4 @@
 var WebSocketServer = require('websocket').server
-var request = require('websocket').request
 var http = require('http');
 var crypto = require('crypto');
 
