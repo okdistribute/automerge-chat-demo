@@ -52,17 +52,16 @@ function App() {
     if (maybeRoom.length && maybeRoom !== roomName) return joinRoom(maybeRoom)
     if (!roomName.length) return
 
-    function onupdate (changes: Automerge.BinaryChange[]) {
-      if (client) {
-        setMessages(client.document.messages || [])
-        if (changes) chat.save(client.document, changes)
-      }
+    function onupdate (changes?: Automerge.BinaryChange[]) {
+      if (!client) throw new Error('You have to join a room first.')
+      setMessages(client.document.messages || [])
+      if (changes) chat.save(client.document, changes)
     }
 
     chat.load(roomName).then((room: chat.Room) => {
       client = new Client<chat.Room>(room.name, room)
       client.on('update', onupdate)
-      onupdate([])
+      onupdate()
     })
     return () => {
       client?.removeListener('update', onupdate)
