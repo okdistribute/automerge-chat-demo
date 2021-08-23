@@ -35,7 +35,6 @@ function App() {
 
   function joinRoom(roomName: string) {
     if (client) {
-      console.log('closing client?')
       client.close()
     }
     setRoomName(roomName)
