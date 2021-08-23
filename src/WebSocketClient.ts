@@ -1,5 +1,6 @@
 import events from 'events';
-import Automerge from 'automerge'
+import { createHash } from 'crypto';
+import Automerge, { BinaryChange } from 'automerge'
 
 export default class Client<T> extends events.EventEmitter {
   open: boolean = false;
@@ -8,10 +9,20 @@ export default class Client<T> extends events.EventEmitter {
   documentId: string;
   document: Automerge.Doc<T>
 
-  constructor(documentId: string, document: Automerge.Doc<T>) {
+  constructor(documentId: string, document: Automerge.Doc<T>, publish: boolean = false) {
     super()
+    console.log('creating client')
     this.document = document;
-    this.documentId = documentId;
+
+    if (publish) {
+      this.documentId = documentId
+    } else {
+      // documentId is hidden from server
+      let hash = createHash('sha256')
+      hash.update(documentId)
+      this.documentId = hash.digest('hex')
+    } 
+
     this.syncState = Automerge.initSyncState()
     this.client = this._createClient()
   }
@@ -46,22 +57,27 @@ export default class Client<T> extends events.EventEmitter {
       let msg = new Uint8Array(e.data);
       //@ts-ignore
       let [ newDoc, newSyncState, patch ] = Automerge.receiveSyncMessage(this.document, this.syncState, msg)
+      let changes: BinaryChange[] = []
+      if (patch) {
+        changes = Automerge.Backend.getChanges(newDoc, Automerge.Backend.getHeads(this.document));
+      }
       this.document = newDoc;
       this.syncState = newSyncState;
-      console.log(patch)
-      this.emit('update')
+      this.emit('update', changes)
       this.updatePeers()
     }; 
     return this.client;
   }
 
-  update() {
+  localChange(newDoc: Automerge.Doc<T>) {
+    this.document = newDoc
     if (!this.open) {
-      this.once('open', () => this.update())
+      this.once('open', () => this.localChange(newDoc))
       return
     }
+    let change = Automerge.getLastLocalChange(newDoc)
     this.updatePeers()
-    this.emit('update')
+    this.emit('update', [change])
   }
 
   updatePeers() {

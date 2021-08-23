@@ -1,6 +1,5 @@
 import { createHash } from 'crypto';
 import Automerge from 'automerge';
-import Client from './WebSocketClient'
 import { DB } from './db';
 
 export type Room = {
@@ -13,68 +12,44 @@ export type Message = {
   time: number
 }
 
-let rooms = new Map<string, Client<Room>>()
 let idb = new DB('dbname')
 
-export function list(): string[] {
-  return Array.from(rooms.keys())
-}
-
-export async function create(name: string): Client<Room> {
+function create(name: string): Room {
   console.log('creating room')
   let head = Automerge.change(Automerge.init<Room>('0000'), { time: 0 }, (doc: Room) => {
     doc.name = name;
     doc.messages = []
   });
   let change = Automerge.Frontend.getLastLocalChange(head)
-  idb.storeChange(name, change);
-  let room = load(name)
-
-  // room name is hidden from server
-  let hash = createHash('sha256') 
-  hash.update(room.name)
-  let documentId = hash.digest('hex')
-
-  let client = new Client<Room>(documentId, room)
-  rooms.set(name, client)
-  return client;
+  let empty = Automerge.init<Room>();
+  const [room, patch] = Automerge.applyChanges(empty, [change])
+  return room;
 }
 
-async function save(name: string, doc: Promise<Room>) {
-
+export async function save(room: Room, changes: Automerge.BinaryChange[]) {
+  let tasks: Promise<string>[] = [];
+  changes.forEach((change) => {
+    tasks.push(idb.storeChange(room.name, change))
+  })
+  return Promise.all(tasks)
 }
 
-function load (name: string): Promise<Room> {
+export async function load (name: string): Promise<Room> {
   let doc = await idb.getDoc(name);
+  if (!doc) return create(name)
   let state = doc.serializedDoc
   ? Automerge.load<Room>(doc.serializedDoc)
-  : Automerge.init<Room>();
+  : create(name)
   const [room, patch] = Automerge.applyChanges(state, doc.changes);
   return room
 }
 
-export function get(name: string): Client<Room> | undefined {
-  return rooms.get(name)
-}
-
-export function update(client: Client<Room>, newDoc: Room): void {
-  let oldDoc = client.document
-  let changes = Automerge.getChanges(oldDoc, newDoc)
-  changes.forEach(async (c) => {
-    await idb.storeChange(newDoc.name, c);
-  });
-  client.document = newDoc
-  client.update()
-}
-
-export function sendMessage(roomName: string, text: string): void {
-  let client = rooms.get(roomName)
-  if (!client) throw new Error('Room with name ' + roomName + ' does not exist.')
-  let newDoc = Automerge.change(client.document, (doc) => {
+export function sendMessage(room: Room, text: string): Room {
+  let newDoc = Automerge.change(room, (doc) => {
     doc.messages.push({
       text,
       time: Date.now()
     })
   })
-  update(client, newDoc)
+  return newDoc
 }

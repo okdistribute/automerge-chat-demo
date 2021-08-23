@@ -1,7 +1,9 @@
 import React, {useState, useEffect} from 'react';
+import Client from './WebSocketClient'
 import ReactDOM from 'react-dom';
 import './App.css';
 import * as chat from './chat'
+import Automerge from 'automerge'
 
 ReactDOM.render(
   <React.StrictMode>
@@ -10,50 +12,61 @@ ReactDOM.render(
   document.getElementById('root')
 );
 
-function Chat(props: { room: chat.Room } ) {
+function Chat(props: { messages: chat.Message[], sendMessage: Function } ) {
   let [ message, setMessage ] = useState('hi')
 
-  let { room } = props
+  let { messages, sendMessage } = props
 
   return <div><ul>
-    {room.messages.map(m => <li key={m.time}>{m.text}</li>)}
+    {messages.map(m => <li key={m.time}>{m.text}</li>)}
     </ul>
     <input onChange={e => setMessage(e.target.value)} defaultValue={message} />
-    <button onClick={() => chat.sendMessage(room.name, message)}>Send</button>
+    <button onClick={() => sendMessage(message)}>Send</button>
    </div>
 }
 
+let client: Client<chat.Room> | undefined;
+
 function App() {
   let [ roomName, setRoomName ]= useState('')
-  let [ room, setRoom ]  = useState<chat.Room>()
+  let [ messages, setMessages ] = useState<chat.Message[]>([])
 
   let ref = React.createRef<HTMLInputElement>()
 
   function joinRoom(roomName: string) {
-    setRoomName(roomName)
-    let old = chat.get(roomName)
-    if (old && roomName) {
-      old.close()
+    if (client) {
+      console.log('closing client?')
+      client.close()
     }
+    setRoomName(roomName)
+    window.location.hash = roomName
   }
 
-  function addRoom() {
-    let newRoomName = ref.current?.value;
-    if (!newRoomName) return
-    joinRoom(newRoomName)
+  function sendMessage(text: string) {
+    if (!client) throw new Error('You have to join a room first.')
+    let newDoc = chat.sendMessage(client.document, text)
+    client.localChange(newDoc)
   }
 
   useEffect(() => {
+    let maybeRoom = window.location.hash.replace('#', '')
+    if (maybeRoom.length && maybeRoom !== roomName) return joinRoom(maybeRoom)
     if (!roomName.length) return
-    let client = chat.get(roomName) || chat.create(roomName)
-    function onupdate () {
-      setRoom(client.document)
-    }
-    client.on('update', onupdate)
 
-    onupdate()
+    function onupdate (changes: Automerge.BinaryChange[]) {
+      if (client) {
+        setMessages(client.document.messages || [])
+        if (changes) chat.save(client.document, changes)
+      }
+    }
+
+    chat.load(roomName).then((room: chat.Room) => {
+      client = new Client<chat.Room>(room.name, room)
+      client.on('update', onupdate)
+      onupdate([])
+    })
     return () => {
-      client.removeListener('update', onupdate)
+      client?.removeListener('update', onupdate)
     }
   }, [roomName])
 
@@ -61,17 +74,19 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
+          <h1>{roomName}</h1>
         <div>
-          {chat.list().map(roomName => 
-            <div onClick={() => joinRoom(roomName)}>{roomName}</div>
-          )}
-          <div>
-            <input ref={ref} ></input>
-            <button onClick={addRoom}>+</button>
-          </div>
-        </div>
-        <div>
-          {room ? <Chat room={room} /> : null }
+          {roomName ?
+            <Chat messages={messages} sendMessage={sendMessage} /> :
+            <div>
+              <input ref={ref} ></input>
+              <button onClick={() => {
+                let newRoomName = ref.current?.value;
+                if (!newRoomName) return
+                joinRoom(newRoomName)
+              }}>Join room</button>
+            </div>
+          }
         </div>
       </header>
     </div>
