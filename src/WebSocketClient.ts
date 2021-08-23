@@ -59,7 +59,10 @@ export default class Client<T> extends events.EventEmitter {
       let [ newDoc, newSyncState, patch ] = Automerge.receiveSyncMessage(this.document, this.syncState, msg)
       let changes: BinaryChange[] = []
       if (patch) {
-        changes = Automerge.Backend.getChanges(newDoc, Automerge.Backend.getHeads(this.document));
+        changes = Automerge.Backend.getChanges(
+          Automerge.Frontend.getBackendState(newDoc),
+          Automerge.Backend.getHeads(this.document) || []
+        );
       }
       this.document = newDoc;
       this.syncState = newSyncState;
