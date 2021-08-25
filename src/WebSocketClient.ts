@@ -78,13 +78,12 @@ export default class Client<T> extends events.EventEmitter {
 
   localChange(newDoc: Automerge.Doc<T>) {
     this.document = newDoc
+    let change = Automerge.getLastLocalChange(newDoc)
+    this.emit('update', [change])
     if (!this.open) {
-      this.once('open', () => this.localChange(newDoc))
+      this.once('open', () => this.updatePeers())
       return
     }
-    let change = Automerge.getLastLocalChange(newDoc)
-    this.updatePeers()
-    this.emit('update', [change])
   }
 
   updatePeers() {
