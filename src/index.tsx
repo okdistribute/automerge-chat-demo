@@ -16,12 +16,19 @@ function Chat(props: { messages: chat.Message[], sendMessage: Function } ) {
   let [ message, setMessage ] = useState('hi')
 
   let { messages, sendMessage } = props
+  
+  let onSend = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    sendMessage(message)
+  }
 
   return <div><ul>
     {messages.map(m => <li key={m.time}>{m.text}</li>)}
     </ul>
-    <input onChange={e => setMessage(e.target.value)} defaultValue={message} />
-    <button onClick={() => sendMessage(message)}>Send</button>
+    <form onSubmit={onSend}>
+      <input autoFocus onChange={e => setMessage(e.target.value)} defaultValue={message} />
+      <button type="submit">Send</button>
+    </form>
    </div>
 }
 
@@ -38,6 +45,7 @@ function App() {
     let newDoc = chat.sendMessage(client.document, text)
     client.localChange(newDoc)
   }
+
   useEffect(() => {
     let onpop = () => {
       let newRoomName = window.location.hash.replace('#', '')
@@ -99,7 +107,7 @@ function App() {
           {roomName.length ?
             <Chat messages={messages} sendMessage={sendMessage} /> :
             <form onSubmit={onJoinRoomSubmit}>
-              <input ref={ref} ></input>
+              <input autoFocus ref={ref} ></input>
               <button type="submit">Join room</button>
             </form>
           }
