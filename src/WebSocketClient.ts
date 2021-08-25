@@ -11,7 +11,6 @@ export default class Client<T> extends events.EventEmitter {
 
   constructor(documentId: string, document: Automerge.Doc<T>, publish: boolean = false) {
     super()
-    console.log('creating client')
     this.document = document;
 
     if (publish) {
@@ -23,6 +22,7 @@ export default class Client<T> extends events.EventEmitter {
       this.documentId = hash.digest('hex')
     } 
 
+    // TODO: need multiple sync states, one per peer.
     this.syncState = Automerge.initSyncState()
     this.client = this._createClient()
   }
@@ -84,6 +84,7 @@ export default class Client<T> extends events.EventEmitter {
       this.once('open', () => this.updatePeers())
       return
     }
+    this.updatePeers()
   }
 
   updatePeers() {

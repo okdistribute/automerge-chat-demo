@@ -33,25 +33,35 @@ function App() {
 
   let ref = React.createRef<HTMLInputElement>()
 
-  function joinRoom(roomName: string) {
-    if (client) {
-      client.close()
-    }
-    setRoomName(roomName)
-    window.location.hash = roomName
-  }
-
   function sendMessage(text: string) {
     if (!client) throw new Error('You have to join a room first.')
     let newDoc = chat.sendMessage(client.document, text)
     client.localChange(newDoc)
   }
+  useEffect(() => {
+    let onpop = () => {
+      let newRoomName = window.location.hash.replace('#', '')
+      if (roomName !== newRoomName) {
+        setRoomName(newRoomName)
+      }
+    }
+    window.addEventListener('popstate', onpop) 
+    onpop()
+    return () => {
+      window.removeEventListener('popstate', () => onpop)
+    }
+  }, [roomName])
 
   // Effect is triggered every time roomName changes
   useEffect(() => {
-    let maybeRoom = window.location.hash.replace('#', '')
-    if (maybeRoom.length && maybeRoom !== roomName) return joinRoom(maybeRoom)
-    if (!roomName.length) return
+    if (client) {
+      client.close()
+    }
+    if (!roomName.length) {
+      console.log('setting no msgs')
+      setMessages([])
+      return
+    }
 
     // TODO: This should be lower level... 
     // I don't want to listen to the websocket client to see when the document changes
@@ -68,27 +78,30 @@ function App() {
       client.on('update', onupdate)
       onupdate()
     })
+
     return () => {
       client?.removeListener('update', onupdate)
     }
   }, [roomName])
 
+  function onJoinRoomSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    let newRoomName = ref.current?.value;
+    if (!newRoomName) return
+    window.location.hash = newRoomName
+  }
 
   return (
     <div className="App">
       <header className="App-header">
           <h1>{roomName}</h1>
         <div>
-          {roomName ?
+          {roomName.length ?
             <Chat messages={messages} sendMessage={sendMessage} /> :
-            <div>
+            <form onSubmit={onJoinRoomSubmit}>
               <input ref={ref} ></input>
-              <button onClick={() => {
-                let newRoomName = ref.current?.value;
-                if (!newRoomName) return
-                joinRoom(newRoomName)
-              }}>Join room</button>
-            </div>
+              <button type="submit">Join room</button>
+            </form>
           }
         </div>
       </header>
