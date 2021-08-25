@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import Automerge from 'automerge';
 import { DB } from './db';
 
@@ -22,7 +21,25 @@ function create(name: string): Room {
   });
   let change = Automerge.Frontend.getLastLocalChange(head)
   let empty = Automerge.init<Room>();
-  const [room, patch] = Automerge.applyChanges(empty, [change])
+  const [room, ] = Automerge.applyChanges(empty, [change])
+
+  /*
+    TODO: For persistence, I want to be able to listen to the document here and respond when it changes 
+    OR provide some backend to automerge 
+
+    let backend = {
+      saveSnapshot: (id: string, doc: Automerge.Doc<T>) => void,
+      loadSnapshot: (id: string) => Automerge.Doc<T>,
+      saveChange: (change: Automerge.BinaryChange) => void,
+      saveChanges: (changes: Automerge.BinaryChange[]) => void,
+      getChanges: (id: string) => Automerge.BinaryChanges[]
+    }
+
+    let empty = Automerge.init<Room>(backend)
+    const [room, patch] = Automerge.applyChanges(empty, [change])
+
+
+  */
   return room;
 }
 
@@ -40,7 +57,7 @@ export async function load (name: string): Promise<Room> {
   let state = doc.serializedDoc
   ? Automerge.load<Room>(doc.serializedDoc)
   : create(name)
-  const [room, patch] = Automerge.applyChanges(state, doc.changes);
+  const [room, ] = Automerge.applyChanges(state, doc.changes);
   return room
 }
 

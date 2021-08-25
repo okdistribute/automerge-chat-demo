@@ -47,11 +47,16 @@ function App() {
     client.localChange(newDoc)
   }
 
+  // Effect is triggered every time roomName changes
   useEffect(() => {
     let maybeRoom = window.location.hash.replace('#', '')
     if (maybeRoom.length && maybeRoom !== roomName) return joinRoom(maybeRoom)
     if (!roomName.length) return
 
+    // TODO: This should be lower level... 
+    // I don't want to listen to the websocket client to see when the document changes
+    // The Automerge document should give me a listener or callback or stream 
+    // that can be used to update the UI every time there is a change added.
     function onupdate (changes?: Automerge.BinaryChange[]) {
       if (!client) throw new Error('You have to join a room first.')
       setMessages(client.document.messages || [])

@@ -59,6 +59,9 @@ export default class Client<T> extends events.EventEmitter {
       let [ newDoc, newSyncState, patch ] = Automerge.receiveSyncMessage(this.document, this.syncState, msg)
       let changes: BinaryChange[] = []
       if (patch) {
+        // TODO: this is not great! I need the changes to know 
+        // what the remote peer changed in the document
+        // This is useful in this demo for persistence. 
         changes = Automerge.Backend.getChanges(
           Automerge.Frontend.getBackendState(newDoc),
           Automerge.Backend.getHeads(this.document) || []
@@ -66,6 +69,7 @@ export default class Client<T> extends events.EventEmitter {
       }
       this.document = newDoc;
       this.syncState = newSyncState;
+      // I shouldn't have to listen to the websocket to know when to update..
       this.emit('update', changes)
       this.updatePeers()
     }; 
@@ -98,6 +102,7 @@ export default class Client<T> extends events.EventEmitter {
   }
 
   close() {
+    console.log('Websocket client closed.')
     this.client.close()
   }
 }
