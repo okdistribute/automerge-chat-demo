@@ -1,8 +1,9 @@
 import React, {useState, useEffect} from 'react';
+import Client from './WebSocketClient'
 import ReactDOM from 'react-dom';
-import './index.css';
 import './App.css';
 import * as chat from './chat'
+import Automerge from 'automerge'
 
 ReactDOM.render(
   <React.StrictMode>
@@ -11,59 +12,106 @@ ReactDOM.render(
   document.getElementById('root')
 );
 
-function Chat(props: { room: chat.Room } ) {
+function Chat(props: { messages: chat.Message[], sendMessage: Function } ) {
   let [ message, setMessage ] = useState('hi')
 
-  let { room } = props
+  let { messages, sendMessage } = props
+  
+  let onSend = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    sendMessage(message)
+  }
 
   return <div><ul>
-    {room.messages.map(m => <li key={m.time}>{m.text}</li>)}
+    {messages.map(m => <li key={m.time}>{m.text}</li>)}
     </ul>
-    <input onChange={e => setMessage(e.target.value)} defaultValue={message} />
-    <button onClick={() => chat.sendMessage(room.name, message)}>Send</button>
+    <form onSubmit={onSend}>
+      <input autoFocus onChange={e => setMessage(e.target.value)} defaultValue={message} />
+      <button type="submit">Send</button>
+    </form>
    </div>
 }
 
+let client: Client<chat.Room> | undefined;
+
 function App() {
   let [ roomName, setRoomName ]= useState('')
-  let [ room, setRoom ]  = useState<chat.Room>()
+  let [ messages, setMessages ] = useState<chat.Message[]>([])
 
   let ref = React.createRef<HTMLInputElement>()
 
-  function joinRoom() {
-    let newRoomName = ref.current?.value;
-    if (!newRoomName) return
-    setRoomName(newRoomName)
-    let old = chat.get(roomName)
-    if (old && roomName) {
-      old.close()
-    }
+  function sendMessage(text: string) {
+    if (!client) throw new Error('You have to join a room first.')
+    let newDoc = chat.sendMessage(client.document, text)
+    client.localChange(newDoc)
   }
 
   useEffect(() => {
-    if (!roomName.length) return
-    let client = chat.get(roomName) || chat.create(roomName)
-    if (!client) throw new Error('Could not create room with name ' + roomName)
-
-    function onupdate () {
-      setRoom(client.document)
+    let onpop = () => {
+      let newRoomName = window.location.hash.replace('#', '')
+      if (roomName !== newRoomName) {
+        setRoomName(newRoomName)
+      }
     }
-    client.on('update', onupdate)
-    onupdate()
-
+    window.addEventListener('popstate', onpop) 
+    onpop()
     return () => {
-      client.removeListener('update', onupdate)
+      window.removeEventListener('popstate', () => onpop)
     }
   }, [roomName])
 
+  // Effect is triggered every time roomName changes
+  useEffect(() => {
+    if (client) {
+      client.close()
+    }
+    if (!roomName.length) {
+      console.log('setting no msgs')
+      setMessages([])
+      return
+    }
+
+    // TODO: This should be lower level... 
+    // I don't want to listen to the websocket client to see when the document changes
+    // The Automerge document should give me a listener or callback or stream 
+    // that can be used to update the UI every time there is a change added.
+    function onupdate (changes?: Automerge.BinaryChange[]) {
+      if (!client) throw new Error('You have to join a room first.')
+      setMessages(client.document.messages || [])
+      if (changes) chat.save(client.document, changes)
+    }
+
+    chat.load(roomName).then((room: chat.Room) => {
+      client = new Client<chat.Room>(room.name, room)
+      client.on('update', onupdate)
+      onupdate()
+    })
+
+    return () => {
+      client?.removeListener('update', onupdate)
+    }
+  }, [roomName])
+
+  function onJoinRoomSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    let newRoomName = ref.current?.value;
+    if (!newRoomName) return
+    window.location.hash = newRoomName
+  }
 
   return (
     <div className="App">
       <header className="App-header">
-        {room ? <Chat room={room} /> : <div>Join a room!</div> }
-
-        <input ref={ref} ></input>
-        <button onClick={joinRoom}>Join</button>
+          <h1>{roomName}</h1>
+        <div>
+          {roomName.length ?
+            <Chat messages={messages} sendMessage={sendMessage} /> :
+            <form onSubmit={onJoinRoomSubmit}>
+              <input autoFocus ref={ref} ></input>
+              <button type="submit">Join room</button>
+            </form>
+          }
+        </div>
       </header>
     </div>
   );
