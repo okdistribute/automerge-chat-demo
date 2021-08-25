@@ -1,5 +1,6 @@
 import events from 'events';
-import Automerge from 'automerge'
+import { createHash } from 'crypto';
+import Automerge, { BinaryChange } from 'automerge'
 
 export default class Client<T> extends events.EventEmitter {
   open: boolean = false;
@@ -8,10 +9,20 @@ export default class Client<T> extends events.EventEmitter {
   documentId: string;
   document: Automerge.Doc<T>
 
-  constructor(documentId: string, document: Automerge.Doc<T>) {
+  constructor(documentId: string, document: Automerge.Doc<T>, publish: boolean = false) {
     super()
     this.document = document;
-    this.documentId = documentId;
+
+    if (publish) {
+      this.documentId = documentId
+    } else {
+      // documentId is hidden from server
+      let hash = createHash('sha256')
+      hash.update(documentId)
+      this.documentId = hash.digest('hex')
+    } 
+
+    // TODO: need multiple sync states, one per peer.
     this.syncState = Automerge.initSyncState()
     this.client = this._createClient()
   }
@@ -36,7 +47,6 @@ export default class Client<T> extends events.EventEmitter {
     };
 
     this.client.onclose = () => {
-      console.log('echo-protocol Client Closed');
       setTimeout(() => {
         this._createClient()
       }, 100)
@@ -45,25 +55,36 @@ export default class Client<T> extends events.EventEmitter {
     this.client.onmessage = (e) => {
       //@ts-ignore
       let msg = new Uint8Array(e.data);
-      console.log('got message', msg)
       //@ts-ignore
       let [ newDoc, newSyncState, patch ] = Automerge.receiveSyncMessage(this.document, this.syncState, msg)
+      let changes: BinaryChange[] = []
+      if (patch) {
+        // TODO: this is not great! I need the changes to know 
+        // what the remote peer changed in the document
+        // This is useful in this demo for persistence. 
+        changes = Automerge.Backend.getChanges(
+          Automerge.Frontend.getBackendState(newDoc),
+          Automerge.Backend.getHeads(this.document) || []
+        );
+      }
       this.document = newDoc;
       this.syncState = newSyncState;
-      console.log(patch)
-      this.emit('update')
+      // I shouldn't have to listen to the websocket to know when to update..
+      this.emit('update', changes)
       this.updatePeers()
     }; 
     return this.client;
   }
 
-  update() {
+  localChange(newDoc: Automerge.Doc<T>) {
+    this.document = newDoc
+    let change = Automerge.getLastLocalChange(newDoc)
+    this.emit('update', [change])
     if (!this.open) {
-      this.once('open', () => this.update())
+      this.once('open', () => this.updatePeers())
       return
     }
     this.updatePeers()
-    this.emit('update')
   }
 
   updatePeers() {
@@ -81,6 +102,7 @@ export default class Client<T> extends events.EventEmitter {
   }
 
   close() {
+    console.log('Websocket client closed.')
     this.client.close()
   }
 }
