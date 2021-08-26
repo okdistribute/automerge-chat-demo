@@ -32,7 +32,7 @@ function Chat(props: { messages: chat.Message[], sendMessage: Function } ) {
    </div>
 }
 
-let client: Client<chat.Room> | undefined;
+let websocket: Client<chat.Room>;
 
 function App() {
   let [ roomName, setRoomName ]= useState('')
@@ -41,31 +41,26 @@ function App() {
   let ref = React.createRef<HTMLInputElement>()
 
   function sendMessage(text: string) {
-    if (!client) throw new Error('You have to join a room first.')
-    let newDoc = chat.sendMessage(client.document, text)
-    client.localChange(newDoc)
+    let newDoc = chat.sendMessage(websocket.document, text)
+    websocket.localChange(newDoc)
   }
-
-  useEffect(() => {
-  }, [roomName])
 
   // Effect is triggered every time roomName changes
   useEffect(() => {
-    if (client) client.close()
+    if (websocket) websocket.close()
 
     // TODO: This should be lower level... 
     // I don't want to listen to the websocket client to see when the document changes
     // The Automerge document should give me a listener or callback or stream 
     // that can be used to update the UI every time there is a change added.
     function onDocumentChanged (changes?: Automerge.BinaryChange[]) {
-      if (!client) throw new Error('You have to join a room first.')
-      setMessages(client.document.messages || [])
-      if (changes) chat.save(client.document, changes)
+      setMessages(websocket.document.messages || [])
+      if (changes) chat.save(websocket.document, changes)
     }
 
     chat.load(roomName).then((room: chat.Room) => {
-      client = new Client<chat.Room>(room.name, room)
-      client.on('update', onDocumentChanged)
+      websocket = new Client<chat.Room>(room.name, room)
+      websocket.on('update', onDocumentChanged)
       onDocumentChanged()
     })
 
@@ -77,7 +72,7 @@ function App() {
     checkHashForRoomName()
 
     return () => {
-      client?.removeListener('update', onDocumentChanged)
+      websocket.removeListener('update', onDocumentChanged)
       window.removeEventListener('popstate', () => checkHashForRoomName)
     }
   }, [roomName])
