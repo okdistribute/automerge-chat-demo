@@ -62,14 +62,7 @@ function App() {
 
   // Effect is triggered every time roomName changes
   useEffect(() => {
-    if (client) {
-      client.close()
-    }
-    if (!roomName.length) {
-      console.log('setting no msgs')
-      setMessages([])
-      return
-    }
+    if (client) client.close()
 
     // TODO: This should be lower level... 
     // I don't want to listen to the websocket client to see when the document changes
