@@ -47,17 +47,6 @@ function App() {
   }
 
   useEffect(() => {
-    let onpop = () => {
-      let newRoomName = window.location.hash.replace('#', '')
-      if (roomName !== newRoomName) {
-        setRoomName(newRoomName)
-      }
-    }
-    window.addEventListener('popstate', onpop) 
-    onpop()
-    return () => {
-      window.removeEventListener('popstate', () => onpop)
-    }
   }, [roomName])
 
   // Effect is triggered every time roomName changes
@@ -68,7 +57,7 @@ function App() {
     // I don't want to listen to the websocket client to see when the document changes
     // The Automerge document should give me a listener or callback or stream 
     // that can be used to update the UI every time there is a change added.
-    function onupdate (changes?: Automerge.BinaryChange[]) {
+    function onDocumentChanged (changes?: Automerge.BinaryChange[]) {
       if (!client) throw new Error('You have to join a room first.')
       setMessages(client.document.messages || [])
       if (changes) chat.save(client.document, changes)
@@ -76,12 +65,20 @@ function App() {
 
     chat.load(roomName).then((room: chat.Room) => {
       client = new Client<chat.Room>(room.name, room)
-      client.on('update', onupdate)
-      onupdate()
+      client.on('update', onDocumentChanged)
+      onDocumentChanged()
     })
 
+    let checkHashForRoomName = () => {
+      let newRoomName = window.location.hash.replace('#', '')
+      if (roomName !== newRoomName) setRoomName(newRoomName)
+    }
+    window.addEventListener('popstate', checkHashForRoomName) 
+    checkHashForRoomName()
+
     return () => {
-      client?.removeListener('update', onupdate)
+      client?.removeListener('update', onDocumentChanged)
+      window.removeEventListener('popstate', () => checkHashForRoomName)
     }
   }, [roomName])
 
