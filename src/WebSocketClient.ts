@@ -11,7 +11,9 @@ export default class Client<T> extends events.EventEmitter {
 
   constructor(documentId: string, document: Automerge.Doc<T>, publish: boolean = false) {
     super()
+    if (!document) throw new Error('document required')
     this.document = document;
+    console.log('Joining', documentId)
 
     if (publish) {
       this.documentId = documentId
@@ -31,7 +33,6 @@ export default class Client<T> extends events.EventEmitter {
     this.syncState = Automerge.initSyncState()
     this.client = new WebSocket(`ws://localhost:8080/${this.documentId}`, 'echo-protocol');
     this.client.binaryType = 'arraybuffer';
-    console.log('Joining', this.documentId)
 
     this.client.onerror = () => {
       console.log('Connection Error');

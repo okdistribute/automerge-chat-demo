@@ -1,9 +1,10 @@
 import React, {useState, useEffect} from 'react';
 import Client from './WebSocketClient'
-import ReactDOM from 'react-dom';
+import ReactDOM from 'react-dom'
 import './App.css';
 import * as chat from './chat'
 import Automerge from 'automerge'
+import events from 'events'
 
 ReactDOM.render(
   <React.StrictMode>
@@ -32,7 +33,61 @@ function Chat(props: { messages: chat.Message[], sendMessage: Function } ) {
    </div>
 }
 
-let websocket: Client<chat.Room>;
+class ChatRoomState extends events.EventEmitter {
+  client: Client<chat.Room> | undefined;
+  watcher: Function | undefined;
+
+  constructor() {
+    super()
+    this.onDocumentChanged = this.onDocumentChanged.bind(this)
+  }
+
+  watch(watcher: Function) {
+    this.watcher = watcher
+  }
+
+  unwatch() {
+    this.watcher = undefined
+  }
+
+
+  load(roomName: string, cb: Function) {
+    if (this.client) {
+      this.client.removeListener('update', this.onDocumentChanged)
+      this.client.close()
+    }
+
+    chat.load(roomName).then((room: chat.Room) => {
+      this.client = new Client<chat.Room>(roomName, room)
+
+      // TODO: I don't want to listen to the websocket client to see when the document changes
+      // The Automerge document should give me a listener or callback or stream 
+      // that can be used to update the UI every time there is a change added.
+      this.client.on('update', this.onDocumentChanged)
+      this.onDocumentChanged()
+      cb()
+    })
+  }
+
+  onDocumentChanged (changes?: Automerge.BinaryChange[]) {
+    if (!this.client) return console.error('no room')
+    if (changes) chat.save(this.client.document, changes)
+    if (this.watcher) this.watcher()
+  }
+
+  sendMessage(text: string) {
+    if (!this.client) return console.error('no room')
+    let newDoc = chat.sendMessage(this.client.document, text)
+    this.client.localChange(newDoc)
+  }
+
+  getMessages(): chat.Message[] {
+    if (!this.client) return []
+    return this.client.document.messages
+  }
+}
+
+let state = new ChatRoomState();
 
 function App() {
   let [ roomName, setRoomName ]= useState('')
@@ -41,39 +96,30 @@ function App() {
   let ref = React.createRef<HTMLInputElement>()
 
   function sendMessage(text: string) {
-    let newDoc = chat.sendMessage(websocket.document, text)
-    websocket.localChange(newDoc)
+    state.sendMessage(text)
   }
 
   // Effect is triggered every time roomName changes
   useEffect(() => {
-    if (websocket) websocket.close()
-
-    // TODO: This should be lower level... 
-    // I don't want to listen to the websocket client to see when the document changes
-    // The Automerge document should give me a listener or callback or stream 
-    // that can be used to update the UI every time there is a change added.
-    function onDocumentChanged (changes?: Automerge.BinaryChange[]) {
-      setMessages(websocket.document.messages || [])
-      if (changes) chat.save(websocket.document, changes)
-    }
-
-    chat.load(roomName).then((room: chat.Room) => {
-      websocket = new Client<chat.Room>(room.name, room)
-      websocket.on('update', onDocumentChanged)
-      onDocumentChanged()
-    })
-
     let checkHashForRoomName = () => {
       let newRoomName = window.location.hash.replace('#', '')
       if (roomName !== newRoomName) setRoomName(newRoomName)
     }
+    if (roomName.length) {
+      let updateMessages = () => {
+        setMessages(state.getMessages())
+      }
+      state.watch(updateMessages)
+      state.load(roomName, updateMessages)
+    }
+
     window.addEventListener('popstate', checkHashForRoomName) 
     checkHashForRoomName()
 
     return () => {
-      websocket.removeListener('update', onDocumentChanged)
+      setMessages([])
       window.removeEventListener('popstate', () => checkHashForRoomName)
+      state.unwatch()
     }
   }, [roomName])
 
@@ -90,7 +136,7 @@ function App() {
           <h1>{roomName}</h1>
         <div>
           {roomName.length ?
-            <Chat messages={messages} sendMessage={sendMessage} /> :
+            <Chat messages={messages || []} sendMessage={sendMessage} /> :
             <form onSubmit={onJoinRoomSubmit}>
               <input autoFocus ref={ref} ></input>
               <button type="submit">Join room</button>
