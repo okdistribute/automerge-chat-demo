@@ -33,6 +33,8 @@ function Chat(props: { messages: chat.Message[], sendMessage: Function } ) {
    </div>
 }
 
+// TODO: one could track the hydrated instance of multiple Automerge documents &
+// websocket clients here
 class ChatRoomState extends events.EventEmitter {
   client: Client<chat.Room> | undefined;
   watcher: Function | undefined;
