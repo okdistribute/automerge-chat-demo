@@ -23,23 +23,6 @@ function create(name: string): Room {
   let empty = Automerge.init<Room>();
   const [room, ] = Automerge.applyChanges(empty, [change])
 
-  /*
-    TODO: For persistence, I want to be able to listen to the document here and respond when it changes 
-    OR provide some backend to automerge 
-
-    let backend = {
-      saveSnapshot: (id: string, doc: Automerge.Doc<T>) => void,
-      loadSnapshot: (id: string) => Automerge.Doc<T>,
-      saveChange: (change: Automerge.BinaryChange) => void,
-      saveChanges: (changes: Automerge.BinaryChange[]) => void,
-      getChanges: (id: string) => Automerge.BinaryChanges[]
-    }
-
-    let empty = Automerge.init<Room>(backend)
-    const [room, patch] = Automerge.applyChanges(empty, [change])
-
-
-  */
   return room;
 }
 
