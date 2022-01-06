@@ -10,7 +10,7 @@
     "@types/node": "^12.0.0",
     "@types/react": "^17.0.0",
     "@types/react-dom": "^17.0.0",
-    "automerge": "1.0.1-preview.4",
+    "automerge": "^1.0.1-preview.6",
     "debug": "^4.3.2",
     "dexie": "^3.0.3",
     "react": "^17.0.2",
