@@ -23,13 +23,13 @@ export default class Client<T> extends events.EventEmitter {
       this.documentId = hash.digest('hex')
     } 
 
-    // TODO: need multiple sync states, one per peer.
     this.syncState = Automerge.initSyncState()
     this.client = this._createClient()
   }
 
   _createClient(): WebSocket {
     this.syncState = Automerge.initSyncState()
+    // TODO: add peerId /documentId/peerId
     this.client = new WebSocket(`ws://localhost:8080/${this.documentId}`, 'echo-protocol');
     this.client.binaryType = 'arraybuffer';
 
