@@ -14,26 +14,27 @@ ReactDOM.render(
 );
 
 function Chat(props: { messages: chat.Message[], sendMessage: Function } ) {
-  let [ message, setMessage ] = useState('hi')
+  let [ message, setMessage ] = useState('')
 
   let { messages, sendMessage } = props
   
   let onSend = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     sendMessage(message)
+    setMessage('')
   }
 
   return <div><ul>
     {messages.map(m => <li key={m.time}>{m.text}</li>)}
     </ul>
     <form onSubmit={onSend}>
-      <input autoFocus onChange={e => setMessage(e.target.value)} defaultValue={message} />
+      <input autoFocus value={message} onChange={e => setMessage(e.target.value)} />
       <button type="submit">Send</button>
     </form>
    </div>
 }
 
-// TODO: one could track the hydrated instance of multiple Automerge documents &
+// One could track the hydrated instance of multiple Automerge documents &
 // websocket clients here
 class ChatRoomState extends events.EventEmitter {
   client: Client<chat.Room> | undefined;
@@ -52,33 +53,35 @@ class ChatRoomState extends events.EventEmitter {
     this.watcher = undefined
   }
 
-
   load(roomName: string, cb: Function) {
     if (this.client) {
-      this.client.removeListener('update', this.onDocumentChanged)
       this.client.close()
     }
 
-    chat.load(roomName).then((room: chat.Room) => {
+    let observable = new Automerge.Observable()
+    chat.load(roomName, { observable }).then((room: chat.Room) => {
       this.client = new Client<chat.Room>(roomName, room)
-
-      // TODO: I don't want to listen to the websocket client to see when the document changes
-      // The Automerge document should give me a listener or callback or stream 
-      // that can be used to update the UI every time there is a change added.
-      this.client.on('update', this.onDocumentChanged)
-      this.onDocumentChanged()
+      observable.observe(room, this.onDocumentChanged)
+      if (this.watcher) this.watcher(room.messages)
       cb()
     })
   }
 
-  onDocumentChanged (changes?: Automerge.BinaryChange[]) {
+  onDocumentChanged(
+    diff: Automerge.MapDiff | Automerge.ListDiff | Automerge.ValueDiff,
+    before: chat.Room,
+    after: chat.Room,
+    local: boolean,
+    changes: Automerge.BinaryChange[])
+  {
     if (!this.client) return console.error('no room')
     if (changes) chat.save(this.client.document, changes)
-    if (this.watcher) this.watcher()
+    if (this.watcher) this.watcher(after.messages)
   }
 
   sendMessage(text: string) {
     if (!this.client) return console.error('no room')
+    console.log('sending message', text)
     let newDoc = chat.sendMessage(this.client.document, text)
     this.client.localChange(newDoc)
   }
@@ -97,10 +100,6 @@ function App() {
 
   let ref = React.createRef<HTMLInputElement>()
 
-  function sendMessage(text: string) {
-    state.sendMessage(text)
-  }
-
   // Effect is triggered every time roomName changes
   useEffect(() => {
     let checkHashForRoomName = () => {
@@ -108,8 +107,9 @@ function App() {
       if (roomName !== newRoomName) setRoomName(newRoomName)
     }
     if (roomName.length) {
-      let updateMessages = () => {
-        setMessages(state.getMessages())
+      let updateMessages = (messages?: chat.Message[]) => {
+        if (messages) setMessages(messages)
+        else setMessages(state.getMessages())
       }
       state.watch(updateMessages)
       state.load(roomName, updateMessages)
@@ -124,6 +124,11 @@ function App() {
       state.unwatch()
     }
   }, [roomName])
+
+
+  function sendMessage(text: string) {
+    state.sendMessage(text)
+  }
 
   function onJoinRoomSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
