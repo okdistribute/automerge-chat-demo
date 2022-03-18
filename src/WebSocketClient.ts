@@ -30,7 +30,7 @@ export default class Client<T> extends events.EventEmitter {
   _createClient(): WebSocket {
     this.syncState = Automerge.initSyncState()
     // TODO: add peerId /documentId/peerId
-    this.client = new WebSocket(`ws://localhost:8080/${this.documentId}`, 'echo-protocol');
+    this.client = new WebSocket(`ws://${window.location.hostname}:8080/${this.documentId}`, 'echo-protocol');
     this.client.binaryType = 'arraybuffer';
 
     this.client.onerror = () => {
